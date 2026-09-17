@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { AuthPanel } from "./auth-panel";
 import { SessionForm } from "./session-form";
+import { ExcelImportDialog } from "./excel-import-dialog";
 import { demoSessions } from "@/lib/demo-data";
 import type { CoachingSession, CoachingSessionInput } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
@@ -24,6 +25,7 @@ export function CoachingDashboard({ configured }: { configured: boolean }) {
   const [year, setYear] = useState("전체");
   const [category, setCategory] = useState("전체");
   const [formOpen, setFormOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<CoachingSession | null>(null);
   const [toast, setToast] = useState("");
 
@@ -89,6 +91,48 @@ export function CoachingDashboard({ configured }: { configured: boolean }) {
     setToast("기록을 삭제했습니다.");
   }
 
+  async function importExcel(records: CoachingSessionInput[]) {
+    if (!configured) {
+      const incoming = records.map((record) => ({ id: crypto.randomUUID(), ...record }));
+      setSessions((old) => {
+        const merged = new Map(old.map((item) => [`${item.session_date}|${item.start_time.slice(0, 5)}|${item.end_time.slice(0, 5)}|${item.client_name}`, item]));
+        incoming.forEach((item) => merged.set(`${item.session_date}|${item.start_time}|${item.end_time}|${item.client_name}`, item));
+        return [...merged.values()];
+      });
+      setToast(`${records.length.toLocaleString("ko-KR")}개 기록을 데모 화면에 가져왔습니다.`);
+      return;
+    }
+    const supabase = createClient();
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || !userData.user) throw userError ?? new Error("로그인이 필요합니다.");
+    for (let index = 0; index < records.length; index += 100) {
+      const chunk = records.slice(index, index + 100).map((record) => ({ ...record, user_id: userData.user.id }));
+      const { error } = await supabase.from("coaching_sessions").upsert(chunk, { onConflict: "user_id,session_date,start_time,end_time,client_name" });
+      if (error) throw error;
+    }
+    await load();
+    setToast(`${records.length.toLocaleString("ko-KR")}개 기록을 가져왔습니다. 중복 기록은 갱신했습니다.`);
+  }
+
+  async function exportExcel() {
+    const savedName = window.localStorage.getItem("coaching-log-applicant-name") ?? "";
+    const applicantName = window.prompt("협회 양식에 표시할 응시자 명을 입력해 주세요.", savedName);
+    if (applicantName === null) return;
+    window.localStorage.setItem("coaching-log-applicant-name", applicantName.trim());
+    setToast("한국코치협회 Excel 양식을 만드는 중입니다.");
+    const response = await fetch("/api/export-excel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessions: filtered, applicantName }) });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: "Excel 파일을 만들지 못했습니다." }));
+      setToast(error.error);
+      return;
+    }
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(await response.blob());
+    link.download = `코칭일지(KSC)_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    link.click(); URL.revokeObjectURL(link.href);
+    setToast(`${filtered.length.toLocaleString("ko-KR")}개 기록을 협회 양식으로 내보냈습니다.`);
+  }
+
   function exportCsv() {
     const headers = ["날짜", "시작", "종료", "고객명", "유료(분)", "무료(분)", "받은 코치더코치(분)", "코칭형태", "진행한 코치더코치(분)", "멘토코칭(분)", "마일스톤", "메모"];
     const rows = filtered.map((s) => [s.session_date, s.start_time, s.end_time, s.client_name, s.paid_minutes, s.free_minutes, s.received_coach_the_coach_minutes, s.coaching_format, s.given_coach_the_coach_minutes, s.mentor_coaching_minutes, s.milestone, s.notes]);
@@ -103,12 +147,12 @@ export function CoachingDashboard({ configured }: { configured: boolean }) {
     <main className="dashboard-shell">
       <aside className="sidebar">
         <div className="logo-row"><div className="brand-mark small">C</div><div><strong>코칭 일지</strong><span>COACHING LOG</span></div></div>
-        <nav><button className="nav-item active"><span>◫</span>대시보드</button><button className="nav-item" onClick={() => { setEditing(null); setFormOpen(true); }}><span>＋</span>새 기록</button><button className="nav-item" onClick={exportCsv}><span>⇩</span>CSV 내보내기</button></nav>
+        <nav><button className="nav-item active"><span>◫</span>대시보드</button><button className="nav-item" onClick={() => { setEditing(null); setFormOpen(true); }}><span>＋</span>새 기록</button><button className="nav-item" onClick={() => setImportOpen(true)}><span>⇧</span>Excel 가져오기</button><button className="nav-item" onClick={exportExcel}><span>⇩</span>KSC Excel 내보내기</button><button className="nav-item" onClick={exportCsv}><span>↧</span>CSV 내보내기</button></nav>
         <div className="sidebar-bottom"><div className="privacy-note"><strong>나만의 기록 공간</strong><span>{configured ? "Supabase RLS로 보호됩니다." : "현재는 데모 모드입니다."}</span></div>{configured && <button className="nav-item" onClick={async () => { await createClient().auth.signOut(); window.location.reload(); }}><span>↪</span>로그아웃</button>}</div>
       </aside>
 
       <section className="workspace">
-        <header className="topbar"><div><p className="eyebrow">MY PRACTICE</p><h1>코칭 기록 대시보드</h1><p className="muted">세션과 인증 시간을 한눈에 확인하세요.</p></div><div className="header-actions"><button className="secondary-button" onClick={exportCsv}>내보내기</button><button className="primary-button" onClick={() => { setEditing(null); setFormOpen(true); }}>새 코칭 기록</button></div></header>
+        <header className="topbar"><div><p className="eyebrow">MY PRACTICE</p><h1>코칭 기록 대시보드</h1><p className="muted">세션과 인증 시간을 한눈에 확인하세요.</p></div><div className="header-actions"><button className="secondary-button" onClick={() => setImportOpen(true)}>Excel 가져오기</button><button className="secondary-button" onClick={exportExcel}>KSC Excel 내보내기</button><button className="primary-button" onClick={() => { setEditing(null); setFormOpen(true); }}>새 코칭 기록</button></div></header>
         {!configured && <div className="demo-banner"><strong>데모 모드</strong><span>화면과 입력 기능을 미리 확인할 수 있습니다. Supabase 키를 연결하면 로그인과 영구 저장이 활성화됩니다.</span></div>}
 
         <section className="metric-grid">
@@ -130,6 +174,7 @@ export function CoachingDashboard({ configured }: { configured: boolean }) {
         </section>
       </section>
       <SessionForm open={formOpen} session={editing} onClose={() => setFormOpen(false)} onSave={save} />
+      <ExcelImportDialog open={importOpen} onClose={() => setImportOpen(false)} onImport={importExcel} />
       {toast && <div className="toast">{toast}</div>}
     </main>
   );
