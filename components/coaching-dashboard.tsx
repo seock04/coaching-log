@@ -147,12 +147,12 @@ export function CoachingDashboard({ configured }: { configured: boolean }) {
     <main className="dashboard-shell">
       <aside className="sidebar">
         <div className="logo-row"><div className="brand-mark small">C</div><div><strong>코칭 일지</strong><span>COACHING LOG</span></div></div>
-        <nav><button className="nav-item active"><span>◫</span>대시보드</button><button className="nav-item" onClick={() => { setEditing(null); setFormOpen(true); }}><span>＋</span>새 기록</button><button className="nav-item" onClick={() => setImportOpen(true)}><span>⇧</span>Excel 가져오기</button><button className="nav-item" onClick={exportExcel}><span>⇩</span>KSC Excel 내보내기</button><button className="nav-item" onClick={exportCsv}><span>↧</span>CSV 내보내기</button></nav>
+        <nav><button className="nav-item active"><span>◫</span>대시보드</button><button className="nav-item" onClick={() => { setEditing(null); setFormOpen(true); }}><span>＋</span>새 기록</button><button className="nav-item" onClick={() => setImportOpen(true)}><span>⇧</span>Excel 가져오기</button><button className="nav-item" onClick={exportExcel}><span>⇩</span>Excel로 내보내기</button><button className="nav-item" onClick={exportCsv}><span>↧</span>CSV 내보내기</button></nav>
         <div className="sidebar-bottom"><div className="privacy-note"><strong>나만의 기록 공간</strong><span>{configured ? "Supabase RLS로 보호됩니다." : "현재는 데모 모드입니다."}</span></div>{configured && <button className="nav-item" onClick={async () => { await createClient().auth.signOut(); window.location.reload(); }}><span>↪</span>로그아웃</button>}</div>
       </aside>
 
       <section className="workspace">
-        <header className="topbar"><div><p className="eyebrow">MY PRACTICE</p><h1>코칭 기록 대시보드</h1><p className="muted">세션과 인증 시간을 한눈에 확인하세요.</p></div><div className="header-actions"><button className="secondary-button" onClick={() => setImportOpen(true)}>Excel 가져오기</button><button className="secondary-button" onClick={exportExcel}>KSC Excel 내보내기</button><button className="primary-button" onClick={() => { setEditing(null); setFormOpen(true); }}>새 코칭 기록</button></div></header>
+        <header className="topbar"><div><p className="eyebrow">MY PRACTICE</p><h1>코칭 기록 대시보드</h1><p className="muted">세션과 인증 시간을 한눈에 확인하세요.</p></div><div className="header-actions"><button className="secondary-button" onClick={() => setImportOpen(true)}>Excel 가져오기</button><button className="secondary-button" onClick={exportExcel}>Excel로 내보내기</button><button className="primary-button" onClick={() => { setEditing(null); setFormOpen(true); }}>새 코칭 기록</button></div></header>
         {!configured && <div className="demo-banner"><strong>데모 모드</strong><span>화면과 입력 기능을 미리 확인할 수 있습니다. Supabase 키를 연결하면 로그인과 영구 저장이 활성화됩니다.</span></div>}
 
         <section className="metric-grid">
